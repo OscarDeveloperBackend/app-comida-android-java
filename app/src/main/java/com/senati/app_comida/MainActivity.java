@@ -9,9 +9,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.android.material.button.MaterialButton;
 import com.senati.app_comida.models.cart.AddToCartRequest;
 import com.senati.app_comida.models.menu.Category;
 import com.senati.app_comida.models.menu.Food;
+import com.senati.app_comida.models.menu.FoodDetailResponse;
 import com.senati.app_comida.models.menu.MenuResponse;
 import com.senati.app_comida.network.ApiClient;
 import com.senati.app_comida.network.CartService;
@@ -79,6 +82,8 @@ public class MainActivity extends BaseActivity {
         txtName.setText(food.getName());
         txtPrice.setText("S/ " + food.getPrice());
 
+        card.setOnClickListener(v -> showFoodModal(food.getId()));
+
         containerPromotions.addView(card);
     }
 
@@ -112,27 +117,68 @@ public class MainActivity extends BaseActivity {
         txtPrice.setText("S/ " + food.getPrice());
         txtStock.setText("Stock: " + food.getStock());
 
-        card.findViewById(R.id.btnAddToCart).setOnClickListener(v -> {
-            CartService cartService = ApiClient.getClient().create(CartService.class);
-            int userId = getSharedPreferences("user_session", MODE_PRIVATE).getInt("id", 0);
-
-            AddToCartRequest request = new AddToCartRequest(userId, food.getId());
-
-            cartService.addToCart(request).enqueue(new Callback<Void>() {
-                @Override
-                public void onResponse(Call<Void> call, Response<Void> response) {
-                    if (response.isSuccessful()) {
-                        Toast.makeText(MainActivity.this, food.getName() + " agregado al carrito", Toast.LENGTH_SHORT).show();
-                    }
-                }
-
-                @Override
-                public void onFailure(Call<Void> call, Throwable t) {
-                    Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
-                }
-            });
-        });
+        // click en toda la tarjeta abre el modal
+        card.setOnClickListener(v -> showFoodModal(food.getId()));
 
         container.addView(card);
+    }
+
+    private void showFoodModal(int foodId) {
+        FoodService foodService = ApiClient.getClient().create(FoodService.class);
+
+        foodService.getFoodById(foodId).enqueue(new Callback<FoodDetailResponse>() {
+            @Override
+            public void onResponse(Call<FoodDetailResponse> call, Response<FoodDetailResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    Food food = response.body().getData();
+
+                    BottomSheetDialog dialog = new BottomSheetDialog(MainActivity.this);
+                    View view = LayoutInflater.from(MainActivity.this)
+                            .inflate(R.layout.bottom_sheet_food, null);
+
+                    ImageView imgFood     = view.findViewById(R.id.imgModalFood);
+                    TextView txtName      = view.findViewById(R.id.txtModalName);
+                    TextView txtPrice     = view.findViewById(R.id.txtModalPrice);
+                    TextView txtDesc      = view.findViewById(R.id.txtModalDescription);
+                    TextView txtStock     = view.findViewById(R.id.txtModalStock);
+                    MaterialButton btnAdd = view.findViewById(R.id.btnModalAddToCart);
+
+                    Glide.with(MainActivity.this).load(food.getUrl_image()).into(imgFood);
+                    txtName.setText(food.getName());
+                    txtPrice.setText("S/ " + food.getPrice());
+                    txtDesc.setText(food.getDescription());
+                    txtStock.setText("Stock: " + food.getStock());
+
+                    btnAdd.setOnClickListener(v -> {
+                        CartService cartService = ApiClient.getClient().create(CartService.class);
+                        int userId = getSharedPreferences("user_session", MODE_PRIVATE).getInt("id", 0);
+
+                        cartService.addToCart(new AddToCartRequest(userId, food.getId()))
+                                .enqueue(new Callback<Void>() {
+                                    @Override
+                                    public void onResponse(Call<Void> call, Response<Void> response) {
+                                        if (response.isSuccessful()) {
+                                            Toast.makeText(MainActivity.this, food.getName() + " agregado", Toast.LENGTH_SHORT).show();
+                                            dialog.dismiss();
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onFailure(Call<Void> call, Throwable t) {
+                                        Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                    });
+
+                    dialog.setContentView(view);
+                    dialog.show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<FoodDetailResponse> call, Throwable t) {
+                Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 }
